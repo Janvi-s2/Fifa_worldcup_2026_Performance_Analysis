@@ -12,26 +12,29 @@ st.set_page_config(
 )
 
 # ---------- CUSTOM CSS ----------
+
 st.markdown("""
 <style>
 .stApp {
-    background: linear-gradient(135deg, #080d1b, #14213d);
-    color: white;
+    background: linear-gradient(135deg, #f8fafc, #e0f2fe);
+    color: #1e293b;
 }
 [data-testid="stSidebar"] {
-    background-color: #101827;
+    background-color: #f1f5f9;
 }
 h1, h2, h3 {
-    color: #60a5fa;
+    color: #1d4ed8;
 }
 [data-testid="stMetric"] {
-    background: #18263e;
-    border: 1px solid #304565;
+    background-color: white;
+    border: 1px solid #cbd5e1;
     padding: 18px;
     border-radius: 15px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 # ---------- HEADER ----------
 st.title("⚽ FIFA World Cup Analytics")
