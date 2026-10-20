@@ -2,64 +2,74 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from pathlib import Path
 
-# ---------------- PAGE CONFIG ----------------
+# ---------- PAGE CONFIG ----------
 st.set_page_config(
     page_title="FIFA World Cup Analytics",
     page_icon="⚽",
     layout="wide"
 )
 
-# ---------------- CUSTOM DESIGN ----------------
+# ---------- CUSTOM CSS ----------
 st.markdown("""
 <style>
 .stApp {
-    background: linear-gradient(135deg, #0b1120, #172554);
-    color: #f8fafc;
+    background: linear-gradient(135deg, #080d1b, #14213d);
+    color: white;
 }
 [data-testid="stSidebar"] {
-    background-color: #111827;
+    background-color: #101827;
 }
 h1, h2, h3 {
     color: #60a5fa;
 }
 [data-testid="stMetric"] {
-    background: #1e293b;
+    background: #18263e;
+    border: 1px solid #304565;
     padding: 18px;
-    border-radius: 14px;
-    border: 1px solid #334155;
+    border-radius: 15px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- HEADER ----------------
+# ---------- HEADER ----------
 st.title("⚽ FIFA World Cup Analytics")
 st.markdown(
-    "### Explore teams, player performance and tournament statistics"
+    "### Player Performance | Team Analysis | World Cup Statistics"
 )
 st.divider()
 
-# ---------------- DATASET UPLOAD ----------------
-st.sidebar.header("📂 Dataset")
+# ---------- AUTOMATIC DATASET LOADING ----------
+BASE_DIR = Path(__file__).resolve().parent
 
-uploaded_file = st.sidebar.file_uploader(
-    "Upload FIFA World Cup CSV",
-    type=["csv"]
+CSV_PATH = (
+    BASE_DIR /
+    "fifa_world_cup_2026_player_performance_dirty.csv"
 )
 
-if uploaded_file is None:
-    st.info("👈 Upload your FIFA World Cup CSV file using the sidebar.")
+@st.cache_data
+def load_data(file_path):
+    return pd.read_csv(file_path)
+
+if not CSV_PATH.exists():
+    st.error(
+        "Dataset file not found. Please check that "
+        "fifa_world_cup_2026_player_performance_dirty.csv "
+        "is uploaded in the same GitHub folder as app.py."
+    )
     st.stop()
 
 try:
-    df = pd.read_csv(uploaded_file)
-    df.columns = df.columns.str.strip()
+    df = load_data(str(CSV_PATH))
 except Exception as e:
-    st.error(f"Unable to read the CSV file: {e}")
+    st.error(f"Dataset could not be loaded: {e}")
     st.stop()
 
-# ---------------- CHECK COLUMNS ----------------
-required_columns = [
+df.columns = df.columns.str.strip()
+
+# ---------- COLUMN CHECK ----------
+required = [
     "team",
     "position",
     "tournament_stage",
@@ -67,71 +77,61 @@ required_columns = [
     "goals"
 ]
 
-missing_columns = [
-    col for col in required_columns if col not in df.columns
-]
+missing = [col for col in required if col not in df.columns]
 
-if missing_columns:
+if missing:
     st.error(
-        "Some required columns are missing: "
-        + ", ".join(missing_columns)
+        "Required columns not found: " + ", ".join(missing)
     )
     st.write("Available columns:", df.columns.tolist())
-    st.caption(
-        "This version requires a player dataset containing "
-        "team, position, tournament_stage, nationality and goals."
-    )
     st.stop()
 
 df["goals"] = pd.to_numeric(df["goals"], errors="coerce")
 df = df.dropna(subset=["goals", "nationality"])
 
 if df.empty:
-    st.warning("No valid player records found in the dataset.")
+    st.warning("No valid player records found.")
     st.stop()
 
-# ---------------- SIDEBAR FILTERS ----------------
-st.sidebar.header("🎛️ Filters")
+# ---------- SIDEBAR FILTERS ----------
+st.sidebar.title("🎛️ Dashboard Filters")
 
-team_options = sorted(df["team"].dropna().unique().tolist())
-position_options = sorted(df["position"].dropna().unique().tolist())
-stage_options = sorted(
+team_list = sorted(df["team"].dropna().unique().tolist())
+position_list = sorted(df["position"].dropna().unique().tolist())
+stage_list = sorted(
     df["tournament_stage"].dropna().unique().tolist()
 )
 
-selected_team = st.sidebar.selectbox(
-    "Select Team",
-    ["All Teams"] + team_options
+team = st.sidebar.selectbox(
+    "Select Team", ["All Teams"] + team_list
 )
 
-selected_position = st.sidebar.selectbox(
-    "Select Position",
-    ["All Positions"] + position_options
+position = st.sidebar.selectbox(
+    "Select Position", ["All Positions"] + position_list
 )
 
-selected_stage = st.sidebar.selectbox(
-    "Select Tournament Stage",
-    ["All Stages"] + stage_options
+stage = st.sidebar.selectbox(
+    "Select Tournament Stage", ["All Stages"] + stage_list
 )
 
-# ---------------- FILTER DATA ----------------
+# ---------- FILTER DATA ----------
 dash = df.copy()
 
-if selected_team != "All Teams":
-    dash = dash[dash["team"] == selected_team]
+if team != "All Teams":
+    dash = dash[dash["team"] == team]
 
-if selected_position != "All Positions":
-    dash = dash[dash["position"] == selected_position]
+if position != "All Positions":
+    dash = dash[dash["position"] == position]
 
-if selected_stage != "All Stages":
-    dash = dash[dash["tournament_stage"] == selected_stage]
+if stage != "All Stages":
+    dash = dash[dash["tournament_stage"] == stage]
 
 if dash.empty:
-    st.warning("No records found. Change the filters and try again.")
+    st.warning("No records found. Change your filters.")
     st.stop()
 
-# ---------------- KPI CARDS ----------------
-st.subheader("📊 Tournament Overview")
+# ---------- KPI CARDS ----------
+st.subheader("📊 Performance Overview")
 
 c1, c2, c3, c4 = st.columns(4)
 
@@ -142,7 +142,7 @@ c4.metric("Average Goals", f"{dash['goals'].mean():.2f}")
 
 st.divider()
 
-# ---------------- TOP 10 NATIONALITIES ----------------
+# ---------- NATIONALITY CHART ----------
 st.subheader("🏆 Top 10 Nationalities by Average Goals")
 
 ng = (
@@ -152,30 +152,28 @@ ng = (
     .sort_values()
 )
 
-if not ng.empty:
-    nationality_df = ng.rename("Average Goals").reset_index()
+nationality_df = ng.rename("Average Goals").reset_index()
 
-    fig1 = px.bar(
-        nationality_df,
-        x="Average Goals",
-        y="nationality",
-        orientation="h",
-        color="Average Goals",
-        color_continuous_scale="Blues",
-        template="plotly_dark",
-        title="Nationality-wise Goal Analysis",
-        labels={"nationality": "Nationality"}
-    )
+fig1 = px.bar(
+    nationality_df,
+    x="Average Goals",
+    y="nationality",
+    orientation="h",
+    color="Average Goals",
+    color_continuous_scale="Blues",
+    template="plotly_dark",
+    title="Average Goals by Nationality"
+)
 
-    fig1.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        coloraxis_showscale=False
-    )
+fig1.update_layout(
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    coloraxis_showscale=False
+)
 
-    st.plotly_chart(fig1, use_container_width=True)
+st.plotly_chart(fig1, use_container_width=True)
 
-# ---------------- TEAM GOALS ----------------
+# ---------- TEAM GOALS ----------
 left, right = st.columns(2)
 
 with left:
@@ -193,25 +191,24 @@ with left:
         x="team",
         y="goals",
         color="goals",
-        color_continuous_scale="Teal",
         template="plotly_dark",
-        title="Top 10 Teams by Total Goals"
+        title="Top 10 Teams by Goals"
     )
 
     fig2.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        coloraxis_showscale=False,
-        xaxis_tickangle=-45
+        xaxis_tickangle=-45,
+        coloraxis_showscale=False
     )
 
     st.plotly_chart(fig2, use_container_width=True)
 
-# ---------------- POSITION DISTRIBUTION ----------------
+# ---------- POSITION DISTRIBUTION ----------
 with right:
-    st.subheader("👟 Player Position Distribution")
+    st.subheader("👟 Position Distribution")
 
-    position_df = (
+    position_data = (
         dash["position"]
         .value_counts()
         .rename_axis("Position")
@@ -219,12 +216,12 @@ with right:
     )
 
     fig3 = px.pie(
-        position_df,
+        position_data,
         names="Position",
         values="Player Records",
         hole=0.5,
         template="plotly_dark",
-        title="Records by Position"
+        title="Players by Position"
     )
 
     fig3.update_layout(
@@ -233,9 +230,9 @@ with right:
 
     st.plotly_chart(fig3, use_container_width=True)
 
-# ---------------- DATA TABLE ----------------
+# ---------- DATA TABLE ----------
 st.divider()
-st.subheader("📋 FIFA World Cup Player Data")
+st.subheader("📋 Player Records")
 
 st.dataframe(
     dash,
@@ -243,13 +240,13 @@ st.dataframe(
     hide_index=True
 )
 
-# ---------------- DOWNLOAD BUTTON ----------------
+# ---------- DOWNLOAD ----------
 st.download_button(
-    label="⬇️ Download Filtered Data CSV",
+    "⬇️ Download Filtered Dataset",
     data=dash.to_csv(index=False).encode("utf-8"),
     file_name="fifa_filtered_data.csv",
     mime="text/csv"
 )
 
 st.markdown("---")
-st.caption("FIFA World Cup Analytics | Python • Pandas • Streamlit • Plotly")
+st.caption("FIFA World Cup Analytics | Built with Streamlit & Plotly")
